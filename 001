@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Editor Visual de Certificados</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&family=Playfair+Display:wght@500;700&display=swap" rel="stylesheet">
+  <style>
+    :root{
+      --bg:#0f172a; --panel:#0b1220; --muted:#94a3b8; --accent:#22d3ee; --accent2:#a78bfa;
+      --border:rgba(255,255,255,.12); --shadow:0 6px 24px rgba(0,0,0,.32);
+    }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:Poppins,system-ui,Segoe UI,Roboto,Helvetica,Arial;background:linear-gradient(135deg,#0f172a,#111827 35%,#0b1220);color:#e5e7eb}
+    .wrap{max-width:1400px;margin:24px auto;padding:0 16px}
+    header{display:flex;gap:12px;align-items:center;justify-content:space-between;margin-bottom:14px}
+    header h1{font-family:"Playfair Display",serif;font-weight:700;letter-spacing:.2px;font-size:clamp(26px,3.5vw,40px);margin:0}
+    header .sub{color:var(--muted)}
+    .grid{display:grid;grid-template-columns:360px 1fr 340px;gap:14px}
+    @media (max-width:1200px){.grid{grid-template-columns:1fr}.right{order:3}.editor{order:2}.left{order:1}}
+    .card{background:linear-gradient(180deg,rgba(255,255,255,.05),rgba(255,255,255,.02));border:1px solid var(--border);border-radius:18px;padding:14px;box-shadow:var(--shadow)}
+    .card h2{margin:4px 6px 10px;font-size:16px;font-weight:700}
+    label{display:block;font-size:12px;margin:8px 6px 4px;color:#cbd5e1}
+    input, select, button, textarea{width:100%;background:#0b1220;border:1px solid var(--border);color:#e5e7eb;border-radius:12px;padding:10px 12px;font-size:13px;outline:none}
+    input:focus,select:focus,textarea:focus{border-color:var(--accent)}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+    .btn{cursor:pointer;font-weight:700;border:0;padding:11px 13px;border-radius:14px;background:linear-gradient(135deg,var(--accent),var(--accent2));color:#051018}
+    .btn-ghost{cursor:pointer;padding:10px 12px;border-radius:12px;border:1px solid var(--border);background:#0b1220}
+    .muted{color:var(--muted);font-size:12px;margin:6px 6px 0}
+
+    /* Editor */
+    .editor{display:grid;grid-template-rows:auto 1fr}
+    .stage-wrap{background:#0b1220;border:1px dashed var(--border);border-radius:18px;padding:12px;display:grid;place-items:center;min-height:420px}
+    .stage{position:relative;max-width:100%;max-height:100%;overflow:auto;border-radius:12px;background:#000}
+    .bg{display:block;max-width:100%;height:auto}
+
+    .field{position:absolute;min-width:140px;min-height:40px;display:flex;align-items:center;justify-content:center;padding:6px 8px;border:1px dashed rgba(255,255,255,.45);border-radius:10px;background:rgba(34,211,238,.05);backdrop-filter:blur(2px);cursor:move}
+    .field.active{outline:2px solid var(--accent)}
+    .field .label{position:absolute;top:-18px;left:0;font-size:11px;background:rgba(0,0,0,.5);padding:2px 6px;border-radius:999px}
+    .field .text{width:100%;text-align:center;pointer-events:none}
+
+    .right .kv{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+    .pill{display:inline-flex;align-items:center;gap:8px;background:rgba(255,255,255,.06);border:1px solid var(--border);padding:7px 10px;border-radius:999px;font-size:12px}
+    .footer{margin-top:10px;color:#94a3b8;font-size:12px}
+    .badge{font-size:11px;background:rgba(34,211,238,.12);color:#a5f3fc;border:1px solid rgba(34,211,238,.35);padding:4px 8px;border-radius:999px}
+  </style>
+  <!-- libs -->
+  <script src="https://cdn.jsdelivr.net/npm/interactjs/dist/interact.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div>
+        <h1>Editor Visual de Certificados</h1>
+        <div class="sub">Suba seu <b>modelo de fundo</b>, posicione os campos (drag & resize) e gere em lote via Excel/CSV.</div>
+      </div>
+      <div class="pill">Tudo roda localmente no seu navegador 🔒</div>
+    </header>
+
+    <div class="grid">
+      <!-- LADO ESQUERDO: Uploads e dados -->
+      <section class="card left">
+        <h2>Modelo de Fundo</h2>
+        <label>Imagem (PNG/JPG) — define o tamanho do certificado</label>
+        <input id="bgInput" type="file" accept="image/*">
+        <div class="row">
+          <div>
+            <label for="w">Largura (px)</label>
+            <input id="w" type="number" placeholder="ex.: 2480" />
+          </div>
+          <div>
+            <label for="h">Altura (px)</label>
+            <input id="h" type="number" placeholder="ex.: 1754" />
+          </div>
+        </div>
+        <div class="actions">
+          <button id="btnApplySize" class="btn-ghost">Aplicar tamanho</button>
+          <button id="btnClearBg" class="btn-ghost">Limpar fundo</button>
+        </div>
+        <div class="muted">Dica: 2480×1754 ≈ A4 horizontal @300 DPI.</div>
+
+        <h2 style="margin-top:10px">Dados fixos</h2>
+        <label for="empresa">Empresa</label>
+        <input id="empresa" placeholder="Ex.: Elev Tecnologia" />
+        <label for="curso">Curso</label>
+        <input id="curso" placeholder="Ex.: Fundamentos de Redes" />
+        <div class="row">
+          <div>
+            <label for="carga">Carga horária</label>
+            <input id="carga" placeholder="Ex.: 8 horas" />
+          </div>
+          <div>
+            <label for="dataCert">Data</label>
+            <input id="dataCert" type="date" />
+          </div>
+        </div>
+        <label for="responsavel">Responsável / Assinatura</label>
+        <input id="responsavel" placeholder="Ex.: João Silva – Gestor" />
+
+        <h2 style="margin-top:10px">Lista (Excel/CSV)</h2>
+        <input id="fileInput" type="file" accept=".xlsx,.xls,.csv" />
+        <div class="row">
+          <div>
+            <label>Coluna Nome</label>
+            <select id="colNome"></select>
+          </div>
+          <div>
+            <label>Coluna CPF</label>
+            <select id="colCPF"></select>
+          </div>
+        </div>
+        <div class="actions">
+          <button id="btnPreviewDemo" class="btn-ghost">Prévia com exemplo</button>
+          <button id="btnGerar" class="btn" disabled>Gerar ZIP (PNGs)</button>
+        </div>
+      </section>
+
+      <!-- CENTRO: Editor visual -->
+      <section class="card editor">
+        <h2>Editor (arraste e redimensione os campos)</h2>
+        <div class="stage-wrap">
+          <div id="stage" class="stage">
+            <img id="bg" class="bg" alt="Modelo" />
+            <!-- Campos editáveis -->
+          </div>
+        </div>
+        <div class="actions" style="margin-top:10px">
+          <button id="btnAddCampo" class="btn-ghost">+ Campo personalizado</button>
+          <button id="btnResetCampos" class="btn-ghost">Repor campos padrão</button>
+          <button id="btnSalvarLayout" class="btn">Salvar Layout (JSON)</button>
+          <input id="loadLayout" type="file" accept="application/json" style="display:none" />
+          <button id="btnCarregarLayout" class="btn-ghost">Carregar Layout</button>
+        </div>
+      </section>
+
+      <!-- DIREITA: Propriedades do campo selecionado -->
+      <section class="card right">
+        <h2>Propriedades do Campo</h2>
+        <div id="noSel" class="muted">Nenhum campo selecionado. Clique em um campo no editor.</div>
+        <div id="props" style="display:none">
+          <label>Campo</label>
+          <input id="pKey" readonly>
+          <label>Texto de exemplo (prévia)</label>
+          <input id="pSample" placeholder="Ex.: Maria da Silva" />
+          <div class="kv">
+            <div>
+              <label>X (px)</label>
+              <input id="pX" type="number" />
+            </div>
+            <div>
+              <label>Y (px)</label>
+              <input id="pY" type="number" />
+            </div>
+          </div>
+          <div class="kv">
+            <div>
+              <label>Largura (px)</label>
+              <input id="pW" type="number" />
+            </div>
+            <div>
+              <label>Altura (px)</label>
+              <input id="pH" type="number" />
+            </div>
+          </div>
+          <div class="kv">
+            <div>
+              <label>Tamanho (px)</label>
+              <input id="pFont" type="number" />
+            </div>
+            <div>
+              <label>Cor</label>
+              <input id="pColor" type="color" value="#ffffff" />
+            </div>
+          </div>
+          <label>Fonte</label>
+          <select id="pFamily">
+            <option value="Playfair Display">Playfair Display</option>
+            <option value="Poppins">Poppins</option>
+            <option value="serif">Serif</option>
+            <option value="sans-serif">Sans Serif</option>
+            <option value="monospace">Monospace</option>
+          </select>
+          <label>Alinhamento</label>
+          <select id="pAlign">
+            <option value="center">Centro</option>
+            <option value="left">Esquerda</option>
+            <option value="right">Direita</option>
+          </select>
+          <div class="actions">
+            <button id="btnDuplicar" class="btn-ghost">Duplicar campo</button>
+            <button id="btnRemover" class="btn-ghost">Remover campo</button>
+          </div>
+        </div>
+
+        <h2 style="margin-top:12px">Status</h2>
+        <div class="badge" id="status">Sem arquivo</div>
+        <div class="footer">Dica: salve seu layout em JSON para reutilizar depois.</div>
+      </section>
+    </div>
+  </div>
+
+  <script>
+  // ======== Estado ========
+  const state = {
+    bg: null, // Image()
+    stageSize: { w: 1200, h: 850 },
+    fields: {}, // key -> {x,y,w,h,font,size,color,align,sample}
+    order: [], // z-index lógico
+    data: [],
+    headers: [],
+    map: { nome:null, cpf:null },
+    selected: null
+  };
+
+  // ======== Seletores ========
+  const stage = document.getElementById('stage');
+  const bgEl = document.getElementById('bg');
+  const wEl = document.getElementById('w');
+  const hEl = document.getElementById('h');
+  const statusEl = document.getElementById('status');
+
+  const empresa = document.getElementById('empresa');
+  const curso = document.getElementById('curso');
+  const carga = document.getElementById('carga');
+  const dataCert = document.getElementById('dataCert');
+  const responsavel = document.getElementById('responsavel');
+
+  const fileInput = document.getElementById('fileInput');
+  const colNome = document.getElementById('colNome');
+  const colCPF = document.getElementById('colCPF');
+
+  const btnGerar = document.getElementById('btnGerar');
+  const btnPreviewDemo = document.getElementById('btnPreviewDemo');
+
+  const noSel = document.getElementById('noSel');
+  const props = document.getElementById('props');
+  const pKey = document.getElementById('pKey');
+  const pSample = document.getElementById('pSample');
+  const pX = document.getElementById('pX');
+  const pY = document.getElementById('pY');
+  const pW = document.getElementById('pW');
+  const pH = document.getElementById('pH');
+  const pFont = document.getElementById('pFont');
+  const pColor = document.getElementById('pColor');
+  const pFamily = document.getElementById('pFamily');
+  const pAlign = document.getElementById('pAlign');
+
+  // Botões editor
+  const btnApplySize = document.getElementById('btnApplySize');
+  const btnClearBg = document.getElementById('btnClearBg');
+  const btnAddCampo = document.getElementById('btnAddCampo');
+  const btnResetCampos = document.getElementById('btnResetCampos');
+  const btnSalvarLayout = document.getElementById('btnSalvarLayout');
+  const btnCarregarLayout = document.getElementById('btnCarregarLayout');
+  const loadLayout = document.getElementById('loadLayout');
+
+  // ======== Campos padrão ========
+  const defaultFields = {
+    nome: { x: 150, y: 300, w: 900, h: 70, font:'Playfair Display', size:64, color:'#ffffff', align:'center', sample:'Maria da Silva' },
+    cpf:  { x: 150, y: 380, w: 900, h: 40, font:'Poppins', size:28, color:'#cbd5e1', align:'center', sample:'123.456.789-00' },
+    empresa: { x: 100, y: 120, w: 600, h: 36, font:'Poppins', size:24, color:'#e5e7eb', align:'left', sample:'Elev Tecnologia' },
+    curso: { x: 100, y: 200, w: 900, h: 44, font:'Poppins', size:32, color:'#e5e7eb', align:'left', sample:'Fundamentos de Redes' },
+    carga: { x: 100, y: 440, w: 420, h: 36, font:'Poppins', size:24, color:'#d1d5db', align:'left', sample:'8 horas' },
+    data:  { x: 540, y: 440, w: 420, h: 36, font:'Poppins', size:24, color:'#d1d5db', align:'right', sample:'2025-08-15' },
+    responsavel: { x: 150, y: 540, w: 900, h: 30, font:'Poppins', size:22, color:'#cbd5e1', align:'center', sample:'João Silva – Gestor' },
+  };
+
+  // ======== Util ========
+  function uuid(){ return 'id'+Math.random().toString(36).slice(2,9); }
+
+  function initStageSize(w,h){
+    state.stageSize = {w:Number(w)||1200, h:Number(h)||850};
+    stage.style.width = state.stageSize.w + 'px';
+    stage.style.height = state.stageSize.h + 'px';
+    wEl.value = state.stageSize.w; hEl.value = state.stageSize.h;
+    // Ajusta BG
+    if (state.bg){ bgEl.width = state.stageSize.w; bgEl.height = state.stageSize.h; }
+  }
+
+  function setStatus(t){ statusEl.textContent = t; }
+
+  function createFieldEl(key, cfg){
+    const el = document.createElement('div');
+    el.className = 'field';
+    el.dataset.key = key;
+    el.style.left = cfg.x+'px';
+    el.style.top = cfg.y+'px';
+    el.style.width = cfg.w+'px';
+    el.style.height = cfg.h+'px';
+
+    const label = document.createElement('div');
+    label.className = 'label';
+    label.textContent = key;
+
+    const text = document.createElement('div');
+    text.className = 'text';
+    text.textContent = cfg.sample || '';
+    text.style.fontFamily = cfg.font;
+    text.style.fontSize = cfg.size+'px';
+    text.style.color = cfg.color;
+    text.style.textAlign = cfg.align;
+
+    el.appendChild(label); el.appendChild(text);
+    stage.appendChild(el);
+
+    // Interações
+    interact(el)
+      .draggable({ listeners: { move: dragMoveListener } })
+      .resizable({ edges: { left:true, right:true, bottom:true, top:true } })
+      .on('resizemove', event => {
+        let {x,y} = event.target.dataset;
+        x = parseFloat(x)||cfg.x; y = parseFloat(y)||cfg.y;
+        event.target.style.width = event.rect.width + 'px';
+        event.target.style.height = event.rect.height + 'px';
+        x += event.deltaRect.left; y += event.deltaRect.top;
+        event.target.style.transform = `translate(${x}px, ${y}px)`;
+        event.target.dataset.x = x; event.target.dataset.y = y;
+      })
+      .on('resizeend', ev => syncFromElement(ev.target));
+
+    el.addEventListener('mousedown', ()=> selectField(key));
+
+    // Guarda no estado e ordem
+    state.fields[key] = {...cfg};
+    if(!state.order.includes(key)) state.order.push(key);
+
+    // coerência com translate (interact)
+    el.dataset.x = 0; el.dataset.y = 0;
+
+    return el;
+  }
+
+  function dragMoveListener (event) {
+    const target = event.target;
+    const x = (parseFloat(target.dataset.x) || 0) + event.dx;
+    const y = (parseFloat(target.dataset.y) || 0) + event.dy;
+    target.style.transform = `translate(${x}px, ${y}px)`;
+    target.dataset.x = x; target.dataset.y = y;
+  }
+
+  function syncFromElement(el){
+    const key = el.dataset.key;
+    const base = state.fields[key];
+    const x = (parseFloat(el.style.left)||0) + (parseFloat(el.dataset.x)||0);
+    const y = (parseFloat(el.style.top)||0) + (parseFloat(el.dataset.y)||0);
+    const w = parseFloat(el.style.width)||base.w;
+    const h = parseFloat(el.style.height)||base.h;
+    Object.assign(state.fields[key], {x,y,w,h});
+    if(state.selected===key) loadProps(key);
+  }
+
+  function selectField(key){
+    state.selected = key;
+    document.querySelectorAll('.field').forEach(f=>f.classList.remove('active'));
+    const el = [...document.querySelectorAll('.field')].find(e=>e.dataset.key===key);
+    if(el){ el.classList.add('active'); loadProps(key); }
+  }
+
+  function loadProps(key){
+    const f = state.fields[key];
+    if(!f) return;
+    noSel.style.display = 'none';
+    props.style.display = 'block';
+    pKey.value = key;
+    pSample.value = f.sample || '';
+    pX.value = Math.round(f.x); pY.value = Math.round(f.y);
+    pW.value = Math.round(f.w); pH.value = Math.round(f.h);
+    pFont.value = f.size; pColor.value = f.color; pFamily.value = f.font; pAlign.value = f.align;
+  }
+
+  function applyProps(){
+    const key = state.selected; if(!key) return;
+    const f = state.fields[key];
+    Object.assign(f, {
+      sample: pSample.value,
+      x:Number(pX.value)||f.x,
+      y:Number(pY.value)||f.y,
+      w:Number(pW.value)||f.w,
+      h:Number(pH.value)||f.h,
+      size:Number(pFont.value)||f.size,
+      color:pColor.value||f.color,
+      font:pFamily.value||f.font,
+      align:pAlign.value||f.align
+    });
+    const el = [...document.querySelectorAll('.field')].find(e=>e.dataset.key===key);
+    if(el){
+      el.style.left = f.x+'px'; el.style.top = f.y+'px'; el.style.width = f.w+'px'; el.style.height = f.h+'px';
+      el.dataset.x = 0; el.dataset.y = 0; el.style.transform = 'translate(0,0)';
+      el.querySelector('.text').style.fontSize = f.size+'px';
+      el.querySelector('.text').style.color = f.color;
+      el.querySelector('.text').style.fontFamily = f.font;
+      el.querySelector('.text').style.textAlign = f.align;
+      el.querySelector('.text').textContent = f.sample || '';
+    }
+  }
+
+  [pSample,pX,pY,pW,pH,pFont,pColor,pFamily,pAlign].forEach(el=>{
+    el.addEventListener('input', applyProps);
+  });
+
+  function mountDefaults(){
+    // Limpa
+    stage.querySelectorAll('.field').forEach(n=>n.remove());
+    state.fields = {}; state.order = [];
+    // Cria
+    Object.entries(defaultFields).forEach(([k,cfg])=> createFieldEl(k,cfg));
+    selectField('nome');
+  }
+
+  // ======== Fundo / tamanho ========
+  document.getElementById('bgInput').addEventListener('change', e=>{
+    const file = e.target.files[0]; if(!file) return;
+    const img = new Image();
+    img.onload = ()=>{
+      state.bg = img;
+      bgEl.src = URL.createObjectURL(file);
+      initStageSize(img.naturalWidth, img.naturalHeight);
+      setStatus(`Modelo: ${file.name} (${img.naturalWidth}x${img.naturalHeight})`);
+    };
+    img.src = URL.createObjectURL(file);
+  });
+
+  btnApplySize.addEventListener('click', ()=>{
+    initStageSize(wEl.value, hEl.value);
+  });
+  btnClearBg.addEventListener('click', ()=>{
+    state.bg = null; bgEl.removeAttribute('src'); setStatus('Sem arquivo');
+  });
+
+  // ======== Layout (salvar/carregar) ========
+  btnSalvarLayout.addEventListener('click', ()=>{
+    const layout = {
+      stage: state.stageSize,
+      fields: state.fields,
+      order: state.order
+    };
+    const blob = new Blob([JSON.stringify(layout,null,2)], {type:'application/json'});
+    saveAs(blob, 'layout_certificado.json');
+  });
+
+  btnCarregarLayout.addEventListener('click', ()=> loadLayout.click());
+  loadLayout.addEventListener('change', async (e)=>{
+    const file = e.target.files[0]; if(!file) return;
+    const txt = await file.text();
+    const layout = JSON.parse(txt);
+    if(layout.stage){ initStageSize(layout.stage.w, layout.stage.h); }
+    // Limpa campos atuais
+    stage.querySelectorAll('.field').forEach(n=>n.remove());
+    state.fields = {}; state.order = [];
+    Object.entries(layout.fields||{}).forEach(([k,cfg])=> createFieldEl(k,cfg));
+    state.order = layout.order||Object.keys(state.fields);
+    selectField(Object.keys(state.fields)[0]);
+  });
+
+  btnAddCampo.addEventListener('click', ()=>{
+    const key = prompt('Nome do novo campo (sem espaços, use _):','custom_'+Object.keys(state.fields).length);
+    if(!key || state.fields[key]) return;
+    createFieldEl(key, { x:100, y:100, w:300, h:40, font:'Poppins', size:22, color:'#ffffff', align:'left', sample:'Texto' });
+    selectField(key);
+  });
+
+  btnResetCampos.addEventListener('click', ()=> mountDefaults());
+
+  // ======== Excel ========
+  fileInput.addEventListener('change', async (e)=>{
+    const file = e.target.files[0]; if(!file) return;
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, {type:'array', raw:true});
+    const sheet = wb.Sheets[wb.SheetNames[0]];
+    const json = XLSX.utils.sheet_to_json(sheet, {defval:'', raw:true});
+    state.data = json; state.headers = Object.keys(json[0]||{});
+    fillSelect(colNome, state.headers); fillSelect(colCPF, state.headers);
+    autoMap();
+    setStatus(`Lista: ${file.name} (${state.data.length} linhas)`);
+    checkReady();
+  });
+
+  function fillSelect(sel, arr){
+    sel.innerHTML = ''; arr.forEach(h=>{ const o=document.createElement('option'); o.value=h; o.textContent=h; sel.appendChild(o); });
+  }
+
+  function autoMap(){
+    const lc = state.headers.map(h=>h.toLowerCase());
+    const find = (k)=>{ const i = lc.findIndex(h=> h===k || h.includes(k)); return i>-1? state.headers[i]: null; };
+    colNome.value = find('nome') || state.headers[0] || '';
+    colCPF.value  = find('cpf')  || state.headers[1] || '';
+    state.map.nome = colNome.value; state.map.cpf = colCPF.value;
+  }
+  colNome.addEventListener('change', ()=>{ state.map.nome = colNome.value; checkReady(); });
+  colCPF.addEventListener('change', ()=>{ state.map.cpf  = colCPF.value;  checkReady(); });
+
+  btnPreviewDemo.addEventListener('click', ()=>{
+    state.data = [ { Nome:'Ana Paula Rocha', CPF:'111.222.333-44' } ];
+    state.headers = ['Nome','CPF'];
+    fillSelect(colNome,state.headers); fillSelect(colCPF,state.headers);
+    colNome.value='Nome'; colCPF.value='CPF';
+    state.map={nome:'Nome', cpf:'CPF'};
+    setStatus('Prévia de exemplo pronta');
+  });
+
+  function checkReady(){
+    const ok = state.data.length>0 && state.map.nome && state.map.cpf && Object.keys(state.fields).length>0;
+    btnGerar.disabled = !ok;
+  }
+
+  // ======== Render final (canvas) ========
+  function drawToCanvas(cfg){
+    const {bg, stageSize, fields} = state;
+    const canvas = document.createElement('canvas');
+    canvas.width = stageSize.w; canvas.height = stageSize.h;
+    const ctx = canvas.getContext('2d');
+    // fundo
+    if(bg){ ctx.drawImage(bg, 0,0, stageSize.w, stageSize.h); } else { ctx.fillStyle='#0b1220'; ctx.fillRect(0,0,canvas.width,canvas.height); }
+    ctx.textBaseline='middle';
+
+    function drawBoxText(text, f){
+      const x=f.x, y=f.y, w=f.w, h=f.h;
+      ctx.save();
+      ctx.beginPath(); ctx.rect(x,y,w,h); ctx.clip();
+      ctx.font = `${f.size||24}px ${f.font||'Poppins'}`;
+      ctx.fillStyle = f.color||'#fff';
+      let tx = x + w/2; // center default
+      if(f.align==='left') tx = x + 2;
+      if(f.align==='right') tx = x + w - 2;
+      ctx.textAlign = f.align||'center';
+      wrapText(ctx, text, tx, y + h/2, w - 8, f.size*1.2, f.align||'center');
+      ctx.restore();
+    }
+
+    // Monta valores
+    const fixed = {
+      empresa: empresa.value || '',
+      curso: curso.value || '',
+      carga: carga.value || '',
+      data: dataCert.value || '',
+      responsavel: responsavel.value || ''
+    };
+
+    // Desenha cada campo conforme ordem
+    for(const key of state.order){
+      const f = fields[key];
+      let text = f.sample || '';
+      if(key==='nome' || key==='cpf' || fixed[key]!==undefined){
+        // mantém sample na prévia, dados reais são aplicados na geração em lote
+      }
+      drawBoxText(text, f);
+    }
+    return canvas;
+  }
+
+  function wrapText(ctx, text, x, y, maxWidth, lineHeight, align){
+    // Desenha verticalmente centralizado; faz quebra simples
+    const words = String(text).split(' ');
+    const lines = [];
+    let line = '';
+    ctx.textAlign = align||'center';
+    for(let n=0;n<words.length;n++){
+      const test = line + words[n] + ' ';
+      const w = ctx.measureText(test).width;
+      if(w > maxWidth && n>0){ lines.push(line.trim()); line = words[n] + ' '; }
+      else line = test;
+    }
+    lines.push(line.trim());
+    const total = lines.length * lineHeight;
+    let yy = y - total/2 + lineHeight/2;
+    lines.forEach(l=>{ ctx.fillText(l, x, yy); yy += lineHeight; });
+  }
+
+  // ======== Geração em lote ========
+  btnGerar.addEventListener('click', async ()=>{
+    if(!state.data.length){ alert('Carregue o Excel/CSV primeiro.'); return; }
+    const zip = new JSZip(); const pasta = zip.folder('certificados');
+
+    // Cache de canvas base sem textos dinâmicos
+    const base = document.createElement('canvas');
+    base.width = state.stageSize.w; base.height = state.stageSize.h;
+    const bctx = base.getContext('2d');
+    if(state.bg){ bctx.drawImage(state.bg,0,0,base.width,base.height); } else { bctx.fillStyle='#0b1220'; bctx.fillRect(0,0,base.width,base.height); }
+
+    const fixed = {
+      empresa: empresa.value || '',
+      curso: curso.value || '',
+      carga: carga.value || '',
+      data: dataCert.value || '',
+      responsavel: responsavel.value || ''
+    };
+
+    for(const row of state.data){
+      const nome = String(row[state.map.nome]||'').trim();
+      const cpf  = String(row[state.map.cpf] ||'').trim();
+      const canvas = document.createElement('canvas');
+      canvas.width = base.width; canvas.height = base.height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(base,0,0);
+
+      // desenha campos na ordem
+      for(const key of state.order){
+        const f = state.fields[key];
+        let value = f.sample || '';
+        if(key==='nome') value = nome;
+        else if(key==='cpf') value = cpf;
+        else if(fixed[key] !== undefined) value = fixed[key];
+        drawField(ctx, value, f);
+      }
+
+      const dataUrl = canvas.toDataURL('image/png');
+      const b64 = dataUrl.split(',')[1];
+      const safe = (nome || 'participante').replace(/[^a-z0-9\-_. ]/gi,'_').slice(0,80);
+      pasta.file(`${safe||'participante'}.png`, b64, {base64:true});
+    }
+
+    const blob = await zip.generateAsync({type:'blob'});
+    saveAs(blob, 'certificados.zip');
+  });
+
+  function drawField(ctx, text, f){
+    const x=f.x, y=f.y, w=f.w, h=f.h;
+    ctx.save();
+    ctx.beginPath(); ctx.rect(x,y,w,h); ctx.clip();
+    ctx.font = `${f.size||24}px ${f.font||'Poppins'}`;
+    ctx.fillStyle = f.color||'#fff';
+    let tx = x + w/2;
+    if(f.align==='left') tx = x + 2;
+    if(f.align==='right') tx = x + w - 2;
+    ctx.textAlign = f.align||'center';
+    wrapText(ctx, text, tx, y + h/2, w - 8, (f.size||24)*1.2, f.align||'center');
+    ctx.restore();
+  }
+
+  // ======== Inicialização ========
+  function boot(){
+    initStageSize(1200, 850);
+    mountDefaults();
+    setStatus('Pronto para iniciar');
+  }
+  boot();
+
+  </script>
+</body>
+</html>
