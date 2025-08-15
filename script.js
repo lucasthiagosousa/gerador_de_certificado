@@ -1,0 +1,1 @@
+console.log('Editor carregado - implementar lógica JS aqui.');
